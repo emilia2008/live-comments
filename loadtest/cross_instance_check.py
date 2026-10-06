@@ -39,9 +39,12 @@ async def check(url_a: str, url_b: str, allow_same_instance: bool) -> None:
         if instance_a == instance_b and not allow_same_instance:
             raise AssertionError("both viewers landed on the same instance")
 
+        # Alice and Bob both run here, so one local clock times the whole trip. (Comparing
+        # with the server's sent_at would mix two machines' clocks, which can differ by seconds.)
+        started = time.perf_counter()
         await alice.send(json.dumps({"type": "comment", "text": "hello from the other side"}))
         event = await receive_until(bob, lambda e: e["type"] == "comment")
-        latency = time.time() * 1000 - event["sent_at"]
+        latency = (time.perf_counter() - started) * 1000
         print(f"OK comment: bob got {event['text']!r} from {event['instance']} in {latency:.1f} ms")
 
         await alice.send(json.dumps({"type": "like"}))

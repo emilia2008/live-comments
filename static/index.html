@@ -65,6 +65,8 @@
     .dot.online { background: #2ecc71; }
     .dot.connecting { background: #f1c40f; }
     .dot.offline { background: #e74c3c; }
+    /* Hosting platforms can give instances long names; show the start, full name on hover. */
+    #status-text { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     .comments {
       position: absolute; left: 0; right: 72px; bottom: 68px; height: 48%;
@@ -79,7 +81,11 @@
       animation: rise 0.25s ease-out;
     }
     .comment .user { font-weight: 700; margin-right: 6px; }
-    .comment .via { color: var(--muted); font-size: 11px; margin-left: 6px; }
+    .comment .via {
+      color: var(--muted); font-size: 11px; margin-left: 6px;
+      display: inline-block; max-width: 90px; vertical-align: bottom;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     @keyframes rise { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
 
     .composer {
@@ -267,6 +273,7 @@
       const via = document.createElement("span");
       via.className = "via";
       via.textContent = comment.instance;
+      via.title = comment.instance;
       row.append(name, text, via);
 
       const list = $("comments");
@@ -279,6 +286,7 @@
     function setStatus(state, text) {
       $("status-dot").className = `dot ${state}`;
       $("status-text").textContent = text;
+      $("status-text").title = text;
     }
 
     function floatHeart() {
