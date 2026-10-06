@@ -420,5 +420,4 @@ loadtest/run.py                    load test
 loadtest/cross_instance_check.py   checks two real instances end to end
 tests/             66 tests, no Redis or network needed
 Dockerfile, docker-compose.yml, nginx.conf, render.yaml, .github/workflows/ci.yml
-INTERVIEW_NOTES.md (Vietnamese study notes)
 ```
