@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx2==2.13.1  # needed by FastAPI's TestClient
+websockets==17.2  # used by the load test and the cross-instance check
