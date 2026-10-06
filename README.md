@@ -206,11 +206,11 @@ Check a deployment end to end (both viewers land on the single instance, hence t
 python loadtest/cross_instance_check.py wss://live-comments-dj5v.onrender.com wss://live-comments-dj5v.onrender.com --allow-same-instance
 ```
 
-Measured from the development laptop with this command (about 20 runs): a comment took
-**186–302 ms** from one viewer's send to the other viewer's receive, most of it the network round
-trip to Render. About 1 run in 10 failed because a freshly opened connection to the free instance
-dropped on the way; the same check passed 20 out of 20 times against an identical local instance,
-and four connections held open for 60 seconds against the demo never dropped.
+Measured from the development laptop with this command: a comment took **192–302 ms** from one
+viewer's send to the other viewer's receive (12 runs where the time was printed), most of it the
+network round trip to Render. 4 of 22 runs failed because a freshly opened connection to the free
+instance dropped on the way; the same check passed 20 out of 20 times against an identical local
+instance, and four connections held open for 60 seconds against the demo never dropped.
 
 Please do not point the load test at the free demo; it shares a small machine with other users.
 
