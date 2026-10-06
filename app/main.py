@@ -1,8 +1,10 @@
 """FastAPI application: HTTP and WebSocket routes."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path as FilePath
 
 from fastapi import FastAPI, Path, Query, WebSocket
+from fastapi.responses import FileResponse
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
@@ -12,6 +14,8 @@ from app.config import Settings
 from app.history import History, MemoryHistory, RedisHistory
 from app.schemas import ID_PATTERN
 from app.service import LiveService
+
+INDEX_HTML = FilePath(__file__).resolve().parent.parent / "static" / "index.html"
 
 
 def create_app(
@@ -53,6 +57,10 @@ def create_app(
         user: str = Query(pattern=ID_PATTERN),
     ) -> None:
         await service.handle_viewer(websocket, room_id, user)
+
+    @app.get("/", include_in_schema=False)
+    async def demo_page() -> FileResponse:
+        return FileResponse(INDEX_HTML)
 
     @app.get("/health")
     async def health() -> dict:

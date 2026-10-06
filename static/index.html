@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Comments</title>
+  <style>
+    :root {
+      --bg: #0b0b10;
+      --panel: #17171f;
+      --text: #f5f5f7;
+      --muted: #a0a0ab;
+      --pink: #fe2c55;
+      --cyan: #25f4ee;
+      --glass: rgba(0, 0, 0, 0.42);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+    }
+    button, input { font: inherit; }
+
+    /* ---------- join form ---------- */
+    .join { display: flex; gap: 8px; width: 100%; max-width: 420px; }
+    .join label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+    .join input {
+      width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #2a2a35;
+      background: var(--panel); color: var(--text);
+    }
+    .join button {
+      align-self: flex-end; padding: 8px 16px; border: none; border-radius: 8px;
+      background: var(--pink); color: white; font-weight: 600; cursor: pointer;
+    }
+
+    /* ---------- the "phone" with the stream ---------- */
+    .stage {
+      position: relative; width: 100%; max-width: 420px; flex: 1; min-height: 460px; max-height: 860px;
+      border-radius: 18px; overflow: hidden;
+      background:
+        radial-gradient(circle at 30% 25%, rgba(37, 244, 238, 0.35), transparent 45%),
+        radial-gradient(circle at 75% 60%, rgba(254, 44, 85, 0.35), transparent 50%),
+        linear-gradient(160deg, #1d1b2e, #0d0d14);
+      background-size: 160% 160%;
+      animation: drift 14s ease-in-out infinite alternate;
+    }
+    @keyframes drift { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
+
+    .topbar {
+      position: absolute; top: 0; left: 0; right: 0; padding: 12px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      background: linear-gradient(rgba(0, 0, 0, 0.55), transparent);
+    }
+    .live { background: var(--pink); color: white; font-weight: 800; font-size: 12px; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.05em; }
+    .pill { background: var(--glass); border-radius: 999px; padding: 4px 10px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+    .spacer { flex: 1; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #888; }
+    .dot.online { background: #2ecc71; }
+    .dot.connecting { background: #f1c40f; }
+    .dot.offline { background: #e74c3c; }
+
+    .comments {
+      position: absolute; left: 0; right: 72px; bottom: 68px; height: 48%;
+      padding: 0 12px; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px;
+      overflow: hidden;
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 35%);
+      mask-image: linear-gradient(to bottom, transparent 0, #000 35%);
+    }
+    .comment {
+      align-self: flex-start; max-width: 100%; padding: 6px 10px; border-radius: 14px;
+      background: var(--glass); font-size: 14px; line-height: 1.35; overflow-wrap: anywhere;
+      animation: rise 0.25s ease-out;
+    }
+    .comment .user { font-weight: 700; margin-right: 6px; }
+    .comment .via { color: var(--muted); font-size: 11px; margin-left: 6px; }
+    @keyframes rise { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+    .composer {
+      position: absolute; left: 0; right: 0; bottom: 0; padding: 12px;
+      display: flex; gap: 8px; align-items: center;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
+    }
+    .composer input {
+      flex: 1; min-width: 0; padding: 10px 14px; border-radius: 999px; border: none;
+      background: rgba(255, 255, 255, 0.14); color: var(--text); outline: none;
+    }
+    .composer input:focus { background: rgba(255, 255, 255, 0.2); }
+    .counter { position: absolute; right: 124px; bottom: 23px; font-size: 11px; color: var(--muted); pointer-events: none; }
+    .send, .heart {
+      width: 44px; height: 44px; flex: none; border-radius: 50%; border: none; cursor: pointer;
+      display: grid; place-items: center; transition: transform 0.1s;
+    }
+    .send { background: var(--cyan); color: #0b0b10; font-weight: 800; }
+    .heart { background: var(--glass); color: var(--pink); font-size: 22px; }
+    .send:active, .heart:active { transform: scale(0.85); }
+
+    .hearts { position: absolute; right: 10px; bottom: 64px; width: 50px; height: 60%; pointer-events: none; }
+    .floating-heart {
+      position: absolute; bottom: 0; left: 12px; font-size: 24px;
+      animation: float 1.8s ease-out forwards;
+    }
+    @keyframes float {
+      0% { transform: translate(0, 0) scale(0.6); opacity: 1; }
+      100% { transform: translate(var(--drift), -320px) scale(1.25); opacity: 0; }
+    }
+
+    .toast {
+      position: absolute; left: 50%; top: 64px; transform: translateX(-50%);
+      background: rgba(20, 20, 28, 0.92); border: 1px solid #333; border-radius: 10px;
+      padding: 8px 14px; font-size: 13px; max-width: 90%; text-align: center;
+      opacity: 0; transition: opacity 0.2s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <form class="join" id="join-form">
+    <label>Room <input id="room-input" maxlength="32" autocomplete="off"></label>
+    <label>Your name <input id="user-input" maxlength="32" autocomplete="off"></label>
+    <button type="submit">Join</button>
+  </form>
+
+  <main class="stage">
+    <div class="topbar">
+      <span class="live">LIVE</span>
+      <span class="pill" id="room-name">-</span>
+      <span class="spacer"></span>
+      <span class="pill" title="Viewers in this room">&#128065; <span id="viewers">0</span></span>
+      <span class="pill" title="Likes since you joined">&#10084; <span id="likes">0</span></span>
+      <span class="pill" title="Backend instance this tab is connected to">
+        <span class="dot" id="status-dot"></span><span id="status-text">offline</span>
+      </span>
+    </div>
+
+    <div class="comments" id="comments"></div>
+    <div class="hearts" id="hearts"></div>
+    <div class="toast" id="toast"></div>
+
+    <form class="composer" id="comment-form">
+      <input id="comment-input" maxlength="200" placeholder="Add a comment..." autocomplete="off">
+      <span class="counter" id="counter">0/200</span>
+      <button class="send" type="submit" title="Send">&#10148;</button>
+      <button class="heart" type="button" id="heart-button" title="Like">&#10084;</button>
+    </form>
+  </main>
+
+  <script>
+    const ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
+    const MAX_COMMENTS_ON_SCREEN = 50;
+    const MAX_HEARTS_PER_EVENT = 8;
+
+    const $ = (id) => document.getElementById(id);
+
+    let socket = null;
+    let room = null;
+    let user = null;
+    let stayConnected = false;  // false after the user leaves or the server refuses us
+    let retryDelay = 500;       // ms, doubles after each failed attempt, up to 5 s
+    let totalLikes = 0;
+    let seenCommentIds = new Set();
+
+    // ---------- connecting ----------
+
+    function join(newRoom, newUser) {
+      if (!ID_PATTERN.test(newRoom) || !ID_PATTERN.test(newUser)) {
+        showToast("Room and name: 1-32 letters, digits, - or _");
+        return;
+      }
+      room = newRoom;
+      user = newUser;
+      history.replaceState(null, "", `?room=${room}&user=${user}`);
+      $("room-name").textContent = room;
+      $("comments").replaceChildren();
+      seenCommentIds = new Set();
+      totalLikes = 0;
+      $("likes").textContent = "0";
+      stayConnected = true;
+      retryDelay = 500;
+      if (socket) socket.close();
+      connect();
+    }
+
+    function connect() {
+      setStatus("connecting", "connecting...");
+      const scheme = location.protocol === "https:" ? "wss" : "ws";
+      const url = `${scheme}://${location.host}/ws/rooms/${room}?user=${user}`;
+      const thisSocket = new WebSocket(url);
+      socket = thisSocket;
+
+      thisSocket.onopen = () => { retryDelay = 500; };
+      thisSocket.onmessage = (message) => handleEvent(JSON.parse(message.data));
+      thisSocket.onclose = (event) => {
+        if (socket !== thisSocket) return;  // an older socket we replaced on purpose
+        if (event.code === 1008) {
+          stayConnected = false;
+          setStatus("offline", "refused");
+          showToast("The server refused this room or name.");
+          return;
+        }
+        if (!stayConnected) return;
+        setStatus("offline", `reconnecting in ${retryDelay / 1000}s`);
+        setTimeout(() => { if (stayConnected && socket === thisSocket) connect(); }, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 5000);
+      };
+    }
+
+    function send(message) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) {
+        showToast("Not connected yet.");
+        return false;
+      }
+      socket.send(JSON.stringify(message));
+      return true;
+    }
+
+    // ---------- events from the server ----------
+
+    function handleEvent(event) {
+      switch (event.type) {
+        case "history":
+          setStatus("online", event.instance);
+          event.comments.forEach(addComment);
+          break;
+        case "comment":
+          addComment(event);
+          break;
+        case "likes":
+          totalLikes += event.count;
+          $("likes").textContent = formatCount(totalLikes);
+          for (let i = 0; i < Math.min(event.count, MAX_HEARTS_PER_EVENT); i++) {
+            setTimeout(floatHeart, i * 90);
+          }
+          break;
+        case "viewers":
+          $("viewers").textContent = formatCount(event.count);
+          break;
+        case "error":
+          showToast(event.message);
+          break;
+      }
+    }
+
+    function addComment(comment) {
+      // After a reconnect the history repeats comments we already show.
+      if (seenCommentIds.has(comment.id)) return;
+      seenCommentIds.add(comment.id);
+
+      const row = document.createElement("div");
+      row.className = "comment";
+      const name = document.createElement("span");
+      name.className = "user";
+      name.style.color = colorFor(comment.user);
+      name.textContent = comment.user;
+      const text = document.createElement("span");
+      text.textContent = comment.text;  // textContent, never innerHTML: comments are untrusted
+      const via = document.createElement("span");
+      via.className = "via";
+      via.textContent = comment.instance;
+      row.append(name, text, via);
+
+      const list = $("comments");
+      list.append(row);
+      while (list.children.length > MAX_COMMENTS_ON_SCREEN) list.firstChild.remove();
+    }
+
+    // ---------- small UI helpers ----------
+
+    function setStatus(state, text) {
+      $("status-dot").className = `dot ${state}`;
+      $("status-text").textContent = text;
+    }
+
+    function floatHeart() {
+      const heart = document.createElement("span");
+      heart.className = "floating-heart";
+      heart.textContent = "❤";
+      heart.style.color = `hsl(${330 + Math.random() * 40}, 95%, ${55 + Math.random() * 20}%)`;
+      heart.style.setProperty("--drift", `${Math.round(Math.random() * 60 - 40)}px`);
+      heart.addEventListener("animationend", () => heart.remove());
+      $("hearts").append(heart);
+    }
+
+    let toastTimer = null;
+    function showToast(text) {
+      const toast = $("toast");
+      toast.textContent = text;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 2500);
+    }
+
+    function colorFor(name) {
+      let hash = 0;
+      for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+      return `hsl(${hash % 360}, 85%, 72%)`;
+    }
+
+    function formatCount(n) {
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+      return String(n);
+    }
+
+    // ---------- wiring ----------
+
+    $("join-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      join($("room-input").value.trim(), $("user-input").value.trim());
+    });
+
+    $("comment-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const input = $("comment-input");
+      const text = input.value.trim();
+      if (text && send({ type: "comment", text })) {
+        input.value = "";
+        $("counter").textContent = "0/200";
+      }
+    });
+
+    $("comment-input").addEventListener("input", (event) => {
+      $("counter").textContent = `${event.target.value.length}/200`;
+    });
+
+    $("heart-button").addEventListener("click", () => {
+      if (send({ type: "like" })) floatHeart();  // instant feedback; the batch follows
+    });
+
+    const params = new URLSearchParams(location.search);
+    $("room-input").value = params.get("room") || "lobby";
+    $("user-input").value = params.get("user") || `viewer${Math.floor(1000 + Math.random() * 9000)}`;
+    join($("room-input").value, $("user-input").value);
+  </script>
+</body>
+</html>
