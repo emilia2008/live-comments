@@ -11,7 +11,36 @@ and every performance fix below comes with before/after numbers measured on one 
 phone) and comment. It runs on Render's free plan: after 15 minutes without visitors the service
 sleeps, and the next visit waits about a minute while it wakes up.
 
-![Demo page: two tabs on two different backends](docs/demo.png)
+![Live demo on Render: two browser windows in the same room](docs/live-demo.png)
+
+## Try it in one minute
+
+1. Open https://live-comments-dj5v.onrender.com/?room=lobby. If it shows *connecting...* for a while,
+   the free server is waking up (about a minute).
+2. Open the same link in a second tab or on your phone, and change *Your name* there.
+3. Type a comment in one window. It appears in both at once, tagged with the server that accepted it.
+4. Tap the heart a few times. Hearts float up in both windows: taps are added up and sent as one
+   `likes` event every 200 ms instead of one message per tap.
+5. The eye icon shows how many people are in the room right now.
+6. Send six comments quickly. The sixth is refused with *Too many comments* (token bucket: 5 in a row,
+   then 1 per second).
+7. Write "scam" or "idiot". It is shown as `***`.
+8. Type another room name and press *Join*. Rooms are independent, and anyone joining a room first sees
+   its last 50 comments.
+9. The server's own numbers: [/health](https://live-comments-dj5v.onrender.com/health),
+   [/stats](https://live-comments-dj5v.onrender.com/stats),
+   [/metrics](https://live-comments-dj5v.onrender.com/metrics).
+
+![Rate limit and banned word filter on the live demo](docs/live-rate-limit.png)
+
+**Reading the code:** start with [`app/service.py`](app/service.py) (everything that happens to a
+comment, in one file), then [`app/rooms.py`](app/rooms.py) (per-viewer outbox) and
+[`app/broker.py`](app/broker.py) (Redis Pub/Sub). The load test is [`loadtest/run.py`](loadtest/run.py).
+
+The multi-instance setup (two backends, Redis, nginx) runs with Docker Compose; the free plan allows
+one instance, so the live demo shows the product and the numbers below show the scaling:
+
+![Local setup: two tabs pinned to two different backends](docs/demo.png)
 
 ## Features
 
@@ -176,6 +205,12 @@ Check a deployment end to end (both viewers land on the single instance, hence t
 ```bash
 python loadtest/cross_instance_check.py wss://live-comments-dj5v.onrender.com wss://live-comments-dj5v.onrender.com --allow-same-instance
 ```
+
+Measured from the development laptop with this command (about 20 runs): a comment took
+**186–302 ms** from one viewer's send to the other viewer's receive, most of it the network round
+trip to Render. About 1 run in 10 failed because a freshly opened connection to the free instance
+dropped on the way; the same check passed 20 out of 20 times against an identical local instance,
+and four connections held open for 60 seconds against the demo never dropped.
 
 Please do not point the load test at the free demo; it shares a small machine with other users.
 
