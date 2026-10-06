@@ -22,9 +22,10 @@ async def receive_until(websocket, predicate, timeout: float = 5.0) -> dict:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("expected event did not arrive in time")
-        event = json.loads(await asyncio.wait_for(websocket.recv(), remaining))
-        if predicate(event):
-            return event
+        data = json.loads(await asyncio.wait_for(websocket.recv(), remaining))
+        for event in data if isinstance(data, list) else [data]:  # one event or a batch
+            if predicate(event):
+                return event
 
 
 async def check(url_a: str, url_b: str, allow_same_instance: bool) -> None:

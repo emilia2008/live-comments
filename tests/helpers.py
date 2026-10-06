@@ -24,12 +24,21 @@ def connect(client: TestClient, room_id: str, user_id: str):
     return client.websocket_connect(f"/ws/rooms/{room_id}?user={user_id}")
 
 
+def next_event(websocket) -> dict:
+    """A frame holds one event or a list of events; hand them out one at a time."""
+    pending = websocket.__dict__.setdefault("pending_events", [])
+    if not pending:
+        data = websocket.receive_json()
+        pending.extend(data if isinstance(data, list) else [data])
+    return pending.pop(0)
+
+
 def receive_until(websocket, event_type: str, max_messages: int = 200) -> dict:
-    """Read messages until one has the given type; skip likes/viewers/etc. on the way."""
+    """Read events until one has the given type; skip likes/viewers/etc. on the way."""
     for _ in range(max_messages):
-        message = websocket.receive_json()
-        if message["type"] == event_type:
-            return message
+        event = next_event(websocket)
+        if event["type"] == event_type:
+            return event
     raise AssertionError(f"no {event_type!r} event in {max_messages} messages")
 
 

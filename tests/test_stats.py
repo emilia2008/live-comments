@@ -9,6 +9,8 @@ def test_stats_start_at_zero(client):
         "connections": 0,
         "rooms": 0,
         "messages_sent": 0,
+        "frames_sent": 0,
+        "messages_dropped": 0,
         "comments_received": 0,
         "likes_received": 0,
         "rate_limited": 0,

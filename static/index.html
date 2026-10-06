@@ -195,7 +195,11 @@
       socket = thisSocket;
 
       thisSocket.onopen = () => { retryDelay = 500; };
-      thisSocket.onmessage = (message) => handleEvent(JSON.parse(message.data));
+      thisSocket.onmessage = (message) => {
+        // Under load the server packs several events into one frame as a JSON array.
+        const data = JSON.parse(message.data);
+        (Array.isArray(data) ? data : [data]).forEach(handleEvent);
+      };
       thisSocket.onclose = (event) => {
         if (socket !== thisSocket) return;  // an older socket we replaced on purpose
         if (event.code === 1008) {

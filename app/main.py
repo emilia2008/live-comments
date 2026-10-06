@@ -5,7 +5,7 @@ from pathlib import Path as FilePath
 
 from fastapi import FastAPI, Path, Query, WebSocket
 from fastapi.responses import FileResponse, PlainTextResponse
-from redis.asyncio import Redis
+from redis.asyncio import BlockingConnectionPool, Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
 
@@ -81,11 +81,23 @@ def create_app(
 def connect_redis(redis_url: str) -> Redis:
     """One Redis client (with its connection pool) shared by the broker and the history.
 
-    from_url() does not retry by default, so after a Redis restart the first command on
-    an old pooled connection would fail. Retrying makes it reconnect transparently.
+    - BlockingConnectionPool: at most 50 connections; when all are busy, wait for one.
+      The default pool opens a new connection for every concurrent command, which grew
+      to hundreds of Redis connections when many viewers joined at once.
+    - retry: after a Redis restart the first command on an old pooled connection fails;
+      retrying makes it reconnect transparently (from_url does not retry by default).
+    - protocol=2 (RESP2) works with every Redis version, including the Windows port
+      used for local benchmarks; we need nothing from RESP3.
     """
-    retry = Retry(ExponentialBackoff(cap=1.0, base=0.05), retries=3)
-    return Redis.from_url(redis_url, decode_responses=True, retry=retry)
+    pool = BlockingConnectionPool.from_url(
+        redis_url,
+        max_connections=50,
+        timeout=5,
+        decode_responses=True,
+        protocol=2,
+        retry=Retry(ExponentialBackoff(cap=1.0, base=0.05), retries=3),
+    )
+    return Redis.from_pool(pool)  # the client owns the pool and closes it in aclose()
 
 
 app = create_app()

@@ -22,6 +22,7 @@ class Settings:
     )
 
     history_size: int = 50
+    outbox_size: int = 256  # messages waiting for one viewer before new ones are dropped
     like_flush_interval: float = 0.2  # seconds between two "likes" events of a room
     viewer_update_interval: float = 1.0  # seconds between two "viewers" events of a room
 

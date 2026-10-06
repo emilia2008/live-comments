@@ -5,7 +5,7 @@ main.py only maps URLs to the methods of LiveService.
 Path of one comment:
   viewer -> handle_viewer -> rate limit -> filter words -> save to history
   -> broker.publish("room:{id}") -> every instance's _on_broker_message
-  -> rooms.broadcast -> each local viewer's WebSocket
+  -> rooms.broadcast -> each local viewer's outbox -> sender task -> WebSocket
 """
 
 import asyncio
@@ -22,7 +22,7 @@ from app.history import History
 from app.likes import LikeBatcher
 from app.moderation import BannedWordFilter
 from app.rate_limit import RateLimiter
-from app.rooms import Rooms
+from app.rooms import Connection, Rooms
 from app.schemas import (
     CommentEvent,
     ErrorEvent,
@@ -47,7 +47,7 @@ class LiveService:
         self.settings = settings
         self.broker = broker
         self.history = history
-        self.rooms = Rooms()
+        self.rooms = Rooms(max_pending=settings.outbox_size)
         self.rate_limiter = RateLimiter(
             settings.rate_limit_capacity, settings.rate_limit_refill_per_second
         )
@@ -81,79 +81,81 @@ class LiveService:
         await websocket.accept()
         # Join first, then read history: a comment sent in between may arrive twice
         # (live and in history) but never gets lost. Clients drop duplicates by id.
-        self.rooms.join(room_id, websocket)
+        connection = self.rooms.join(websocket, room_id, user_id)
+        sender = None
         try:
-            await self._send_history(websocket, room_id)
-            count = self.viewer_total(room_id)
-            await self.rooms.send(websocket, ViewersEvent(room_id=room_id, count=count).model_dump_json())
+            # History is written directly, BEFORE the sender task starts, so it always
+            # arrives before the live events already waiting in the outbox.
+            await self._send_history(connection)
+            viewers = ViewersEvent(room_id=room_id, count=self.viewer_total(room_id))
+            self.rooms.send(connection, viewers.model_dump_json())
+            sender = asyncio.create_task(self.rooms.run_sender(connection))
             while True:
                 message = await websocket.receive()
                 if message["type"] == "websocket.disconnect":
                     break
-                await self._handle_message(websocket, room_id, user_id, message.get("text"))
+                await self._handle_message(connection, message.get("text"))
         finally:
-            self.rooms.leave(room_id, websocket)
+            self.rooms.leave(connection)
+            if sender is not None:
+                sender.cancel()
 
-    async def _send_history(self, websocket: WebSocket, room_id: str) -> None:
+    async def _send_history(self, connection: Connection) -> None:
         try:
-            stored = await self.history.recent(room_id)
+            stored = await self.history.recent(connection.room_id)
         except Exception:
             # Without history the viewer can still watch live comments.
             logger.exception("could not read history")
             stored = []
         event = HistoryEvent(
-            room_id=room_id,
+            room_id=connection.room_id,
             instance=self.settings.instance_id,
             comments=[CommentEvent.model_validate_json(item) for item in stored],
         )
-        await self.rooms.send(websocket, event.model_dump_json())
+        await connection.websocket.send_text(event.model_dump_json())
+        self.rooms.messages_sent += 1
+        self.rooms.frames_sent += 1
 
-    async def _handle_message(
-        self, websocket: WebSocket, room_id: str, user_id: str, raw: str | None
-    ) -> None:
+    async def _handle_message(self, connection: Connection, raw: str | None) -> None:
         if raw is None:
-            await self._send_error(websocket, "invalid_message", "Messages must be JSON text.")
+            self._send_error(connection, "invalid_message", "Messages must be JSON text.")
             return
         try:
             message = parse_client_message(raw)
         except ValidationError as error:
-            await self._send_error(websocket, "invalid_message", _first_error(error))
+            self._send_error(connection, "invalid_message", _first_error(error))
             return
 
         if isinstance(message, LikeIn):
             self.likes_received += 1
-            self.likes.add(room_id)
+            self.likes.add(connection.room_id)
         else:
-            await self._handle_comment(websocket, room_id, user_id, message.text)
+            await self._handle_comment(connection, message.text)
 
-    async def _handle_comment(
-        self, websocket: WebSocket, room_id: str, user_id: str, text: str
-    ) -> None:
-        if not self.rate_limiter.allow(user_id):
+    async def _handle_comment(self, connection: Connection, text: str) -> None:
+        if not self.rate_limiter.allow(connection.user_id):
             self.rate_limited += 1
-            await self._send_error(
-                websocket, "rate_limited", "Too many comments. You can send 1 per second."
-            )
+            self._send_error(connection, "rate_limited", "Too many comments. You can send 1 per second.")
             return
 
         self.comments_received += 1
         event = CommentEvent(
             id=uuid.uuid4().hex,
-            room_id=room_id,
-            user=user_id,
+            room_id=connection.room_id,
+            user=connection.user_id,
             text=self.word_filter.clean(text),
             instance=self.settings.instance_id,
         )
         data = event.model_dump_json()
         try:
-            await self.history.add(room_id, data)
-            await self.publish(room_id, data)
+            await self.history.add(connection.room_id, data)
+            await self.publish(connection.room_id, data)
         except Exception:
             logger.exception("could not store or publish a comment")
-            await self._send_error(websocket, "server_error", "Comment not sent, please retry.")
+            self._send_error(connection, "server_error", "Comment not sent, please retry.")
 
-    async def _send_error(self, websocket: WebSocket, code: str, message: str) -> None:
-        await self.rooms.send(websocket, ErrorEvent(code=code, message=message).model_dump_json())
+    def _send_error(self, connection: Connection, code: str, message: str) -> None:
+        self.rooms.send(connection, ErrorEvent(code=code, message=message).model_dump_json())
 
     # ---------- events between instances ----------
 
@@ -168,7 +170,7 @@ class LiveService:
                 self.other_instances.update(report["instance"], report["counts"])
         elif channel.startswith(ROOM_CHANNEL_PREFIX):
             room_id = channel[len(ROOM_CHANNEL_PREFIX):]
-            await self.rooms.broadcast(room_id, data)
+            self.rooms.broadcast(room_id, data)
 
     def stats(self) -> dict:
         """Numbers for /stats and /metrics. They describe THIS instance only."""
@@ -177,6 +179,8 @@ class LiveService:
             "connections": self.rooms.connection_count(),
             "rooms": self.rooms.room_count(),
             "messages_sent": self.rooms.messages_sent,
+            "frames_sent": self.rooms.frames_sent,
+            "messages_dropped": self.rooms.messages_dropped,
             "comments_received": self.comments_received,
             "likes_received": self.likes_received,
             "rate_limited": self.rate_limited,
@@ -220,19 +224,19 @@ class LiveService:
                 local_counts = self.rooms.viewer_counts()
                 report = {"instance": self.settings.instance_id, "counts": local_counts}
                 await self.broker.publish(VIEWERS_CHANNEL, json.dumps(report))
-                await self._send_changed_viewer_counts(local_counts)
+                self._send_changed_viewer_counts(local_counts)
                 self.other_instances.forget_stale()
                 self.rate_limiter.forget_idle_users()
             except Exception:
                 logger.exception("viewer count update failed")
 
-    async def _send_changed_viewer_counts(self, local_counts: dict[str, int]) -> None:
+    def _send_changed_viewer_counts(self, local_counts: dict[str, int]) -> None:
         """Each instance tells only ITS OWN viewers, so this is not published."""
         totals = {room_id: self.viewer_total(room_id) for room_id in local_counts}
         for room_id, total in totals.items():
             if self._last_viewer_counts.get(room_id) != total:
                 event = ViewersEvent(room_id=room_id, count=total)
-                await self.rooms.broadcast(room_id, event.model_dump_json())
+                self.rooms.broadcast(room_id, event.model_dump_json())
         self._last_viewer_counts = totals
 
 

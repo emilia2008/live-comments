@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.main import create_app
-from tests.helpers import connect, fast_settings, receive_until, wait_for
+from tests.helpers import connect, fast_settings, next_event, receive_until, wait_for
 
 
 def comment(text: str) -> dict:
@@ -15,12 +15,12 @@ def comment(text: str) -> dict:
 
 def test_new_viewer_gets_empty_history_then_viewer_count(client):
     with connect(client, "r1", "alice") as alice:
-        history = alice.receive_json()
+        history = next_event(alice)
         assert history["type"] == "history"
         assert history["comments"] == []
         assert history["instance"] == "test"
 
-        viewers = alice.receive_json()
+        viewers = next_event(alice)
         assert viewers["type"] == "viewers"
         assert viewers["count"] == 1
 
@@ -167,9 +167,9 @@ def test_rate_limit_is_per_user(client):
 
 def receive_until_any(websocket, event_types: set[str]) -> dict:
     while True:
-        message = websocket.receive_json()
-        if message["type"] in event_types:
-            return message
+        event = next_event(websocket)
+        if event["type"] in event_types:
+            return event
 
 
 # ---------- likes ----------

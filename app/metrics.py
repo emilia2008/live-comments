@@ -10,7 +10,9 @@ The format is simple enough to write by hand, so no extra library is needed:
 METRICS = [
     ("live_connections", "gauge", "connections", "Open WebSocket connections on this instance."),
     ("live_rooms", "gauge", "rooms", "Rooms with at least one viewer on this instance."),
-    ("live_messages_sent_total", "counter", "messages_sent", "WebSocket messages sent to viewers."),
+    ("live_messages_sent_total", "counter", "messages_sent", "Events sent to viewers."),
+    ("live_frames_sent_total", "counter", "frames_sent", "WebSocket frames sent (one frame may carry several events)."),
+    ("live_messages_dropped_total", "counter", "messages_dropped", "Messages dropped for too slow viewers."),
     ("live_comments_received_total", "counter", "comments_received", "Comments accepted from viewers."),
     ("live_likes_received_total", "counter", "likes_received", "Likes received from viewers."),
     ("live_rate_limited_total", "counter", "rate_limited", "Comments rejected by the rate limiter."),
