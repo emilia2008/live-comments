@@ -16,3 +16,6 @@ Thumbs.db
 
 # Load test output
 loadtest/results/
+
+# Personal interview notes stay on this computer only
+INTERVIEW_NOTES.md

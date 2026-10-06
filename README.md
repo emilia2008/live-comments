@@ -7,6 +7,10 @@ Viewers connect over WebSocket. Several backend instances run behind nginx and s
 Redis Pub/Sub. A multi-process load test measures end-to-end latency (p50/p95/p99) and throughput,
 and every performance fix below comes with before/after numbers measured on one laptop.
 
+**Live demo:** https://live-comments-dj5v.onrender.com/?room=lobby — open it in two tabs (or on your
+phone) and comment. It runs on Render's free plan: after 15 minutes without visitors the service
+sleeps, and the next visit waits about a minute while it wakes up.
+
 ![Demo page: two tabs on two different backends](docs/demo.png)
 
 ## Features
@@ -147,6 +151,33 @@ docker compose up --build
 
 The CI workflow builds this stack on every push and runs the cross-instance check against
 the two backends directly and through nginx.
+
+### Deploy for free on Render
+
+The live demo above runs on [Render](https://render.com)'s free plan, straight from this repository's
+`Dockerfile`. Two ways to get the same:
+
+- **Blueprint (everything as code):** Render dashboard → *New* → *Blueprint* → pick this repository.
+  [`render.yaml`](render.yaml) creates the web service plus a free Key Value (Redis) instance that is
+  reachable only from inside Render, and sets `REDIS_URL` and `INSTANCE_ID`.
+- **By hand:** *New* → *Web Service* → connect the GitHub repository → language *Docker* → instance
+  type *Free* → *Deploy*. Without `REDIS_URL` the app runs in memory mode, which is correct for one
+  instance. Optionally add the environment variable `INSTANCE_ID=render-free`; otherwise the
+  instance is named after Render's long container hostname.
+
+The container listens on `$PORT` when the platform sets it (Render uses 10000) and on 8000 otherwise.
+Free plan limits (from [render.com/docs/free](https://render.com/docs/free)): a single instance, so
+the multi-instance setup is shown with Docker Compose and CI rather than on Render; the service sleeps
+after 15 idle minutes and takes about a minute to wake; 750 free instance hours per month; a free Key
+Value instance keeps no data on disk, so a restart clears the comment history.
+
+Check a deployment end to end (both viewers land on the single instance, hence the flag):
+
+```bash
+python loadtest/cross_instance_check.py wss://live-comments-dj5v.onrender.com wss://live-comments-dj5v.onrender.com --allow-same-instance
+```
+
+Please do not point the load test at the free demo; it shares a small machine with other users.
 
 ### Load test
 
@@ -388,6 +419,6 @@ static/index.html  demo page (plain JavaScript)
 loadtest/run.py                    load test
 loadtest/cross_instance_check.py   checks two real instances end to end
 tests/             66 tests, no Redis or network needed
-Dockerfile, docker-compose.yml, nginx.conf, .github/workflows/ci.yml
+Dockerfile, docker-compose.yml, nginx.conf, render.yaml, .github/workflows/ci.yml
 INTERVIEW_NOTES.md (Vietnamese study notes)
 ```

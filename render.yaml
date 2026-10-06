@@ -1,0 +1,28 @@
+# Render Blueprint: deploys the free demo from this repository.
+# Render dashboard -> New -> Blueprint -> pick this repo. Every push to main redeploys.
+#
+# Free plan limits (render.com/docs/free): one instance only, the service sleeps after
+# 15 minutes without traffic and the next visit waits about a minute while it starts.
+
+services:
+  - name: live-comments
+    type: web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: INSTANCE_ID
+        value: render-free  # short name shown in the demo page
+      - key: REDIS_URL  # Pub/Sub + history in Redis, so history survives the service sleeping
+        fromService:
+          name: live-comments-redis
+          type: keyvalue
+          property: connectionString
+
+  - name: live-comments-redis
+    type: keyvalue
+    plan: free
+    ipAllowList: []  # no access from the internet; only Render services can connect
