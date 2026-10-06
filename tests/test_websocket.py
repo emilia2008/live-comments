@@ -13,9 +13,34 @@ def comment(text: str) -> dict:
 # ---------- joining ----------
 
 
-def test_new_viewer_gets_current_viewer_count(client):
+def test_new_viewer_gets_empty_history_then_viewer_count(client):
     with connect(client, "r1", "alice") as alice:
-        assert receive_until(alice, "viewers")["count"] == 1
+        history = alice.receive_json()
+        assert history["type"] == "history"
+        assert history["comments"] == []
+        assert history["instance"] == "test"
+
+        viewers = alice.receive_json()
+        assert viewers["type"] == "viewers"
+        assert viewers["count"] == 1
+
+
+def test_new_viewer_gets_the_last_50_comments_oldest_first():
+    # No rate limit for this test: one user posts 55 comments quickly.
+    settings = fast_settings(rate_limit_capacity=1000)
+    with TestClient(create_app(settings)) as client:
+        with connect(client, "r1", "alice") as alice:
+            for number in range(55):
+                alice.send_json(comment(f"comment {number}"))
+                receive_until(alice, "comment")
+
+        with connect(client, "r1", "bob") as bob:
+            history = receive_until(bob, "history")
+
+    texts = [c["text"] for c in history["comments"]]
+    assert len(texts) == 50
+    assert texts[0] == "comment 5"
+    assert texts[-1] == "comment 54"
 
 
 @pytest.mark.parametrize("path", ["/ws/rooms/bad.room?user=alice", "/ws/rooms/" + "x" * 33 + "?user=alice"])

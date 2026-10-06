@@ -1,17 +1,5 @@
 from app.rate_limit import RateLimiter, TokenBucket
-
-
-class FakeClock:
-    """A clock that only moves when the test says so."""
-
-    def __init__(self) -> None:
-        self.now = 1000.0
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
+from tests.helpers import FakeClock
 
 
 def test_allows_five_in_a_row_then_blocks_the_sixth():

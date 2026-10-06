@@ -16,7 +16,10 @@ class Settings:
 
     # Empty REDIS_URL means "single instance, keep everything in memory".
     redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", ""))
-    instance_id: str = field(default_factory=lambda: os.getenv("INSTANCE_ID", socket.gethostname()))
+    # Must be unique per running server; hostname + process id is unique even on one laptop.
+    instance_id: str = field(
+        default_factory=lambda: os.getenv("INSTANCE_ID", f"{socket.gethostname()}-{os.getpid()}")
+    )
 
     history_size: int = 50
     like_flush_interval: float = 0.2  # seconds between two "likes" events of a room

@@ -40,3 +40,16 @@ def wait_for(condition, timeout: float = 2.0) -> None:
         if time.monotonic() > deadline:
             raise AssertionError("condition not met in time")
         time.sleep(0.01)
+
+
+class FakeClock:
+    """A clock that only moves when the test says so."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds

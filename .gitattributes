@@ -1,0 +1,2 @@
+# Keep LF line endings so config files work inside Linux containers.
+* text=auto eol=lf
