@@ -170,6 +170,18 @@ class LiveService:
             room_id = channel[len(ROOM_CHANNEL_PREFIX):]
             await self.rooms.broadcast(room_id, data)
 
+    def stats(self) -> dict:
+        """Numbers for /stats and /metrics. They describe THIS instance only."""
+        return {
+            "instance": self.settings.instance_id,
+            "connections": self.rooms.connection_count(),
+            "rooms": self.rooms.room_count(),
+            "messages_sent": self.rooms.messages_sent,
+            "comments_received": self.comments_received,
+            "likes_received": self.likes_received,
+            "rate_limited": self.rate_limited,
+        }
+
     def viewer_total(self, room_id: str) -> int:
         """My live count for the room + the latest counts reported by other instances."""
         return self.rooms.viewer_count(room_id) + self.other_instances.total(room_id)

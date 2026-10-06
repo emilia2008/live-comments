@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path as FilePath
 
 from fastapi import FastAPI, Path, Query, WebSocket
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from redis.asyncio import Redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
@@ -12,6 +12,7 @@ from redis.backoff import ExponentialBackoff
 from app.broker import Broker, MemoryBroker, RedisBroker
 from app.config import Settings
 from app.history import History, MemoryHistory, RedisHistory
+from app.metrics import to_prometheus
 from app.schemas import ID_PATTERN
 from app.service import LiveService
 
@@ -65,6 +66,14 @@ def create_app(
     @app.get("/health")
     async def health() -> dict:
         return {"status": "ok", "instance": settings.instance_id}
+
+    @app.get("/stats")
+    async def stats() -> dict:
+        return service.stats()
+
+    @app.get("/metrics", response_class=PlainTextResponse)
+    async def metrics() -> str:
+        return to_prometheus(service.stats())
 
     return app
 
