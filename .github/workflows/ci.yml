@@ -34,6 +34,8 @@ jobs:
         run: python loadtest/cross_instance_check.py ws://localhost:8001 ws://localhost:8002
       - name: The same through nginx (WebSocket upgrade)
         run: python loadtest/cross_instance_check.py ws://localhost:8080 ws://localhost:8080 --allow-same-instance
+      - name: Small load test through nginx (smoke test of the load test itself)
+        run: python loadtest/run.py --url ws://localhost:8080 --viewers 200 --rooms 4 --senders 20 --duration 10 --processes 2
       - name: Show logs if something failed
         if: failure()
         run: docker compose logs
