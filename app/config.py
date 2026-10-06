@@ -18,7 +18,6 @@ class Settings:
     redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", ""))
     instance_id: str = field(default_factory=lambda: os.getenv("INSTANCE_ID", socket.gethostname()))
 
-    max_comment_length: int = 200
     history_size: int = 50
     like_flush_interval: float = 0.2  # seconds between two "likes" events of a room
     viewer_update_interval: float = 1.0  # seconds between two "viewers" events of a room
